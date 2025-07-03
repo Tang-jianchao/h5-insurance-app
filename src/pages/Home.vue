@@ -86,16 +86,28 @@
       >
         添加保单
       </van-button>
-      <van-button
-        type="info"
-        icon="upload"
-        block
-        round
-        class="action-btn"
-        @click="onImport"
-      >
-        导入
-      </van-button>
+      <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+        <van-button
+          type="info"
+          icon="notes-o"
+          block
+          round
+          style="flex:1"
+          @click="onImportTestData"
+        >
+          测试数据
+        </van-button>
+        <van-button
+          type="info"
+          icon="upload"
+          block
+          round
+          style="flex:1"
+          @click="onImport"
+        >
+          导入数据
+        </van-button>
+      </div>
       <van-button
         type="warning"
         icon="backup"
@@ -227,8 +239,8 @@ function goToMember(id) {
   // 跳转到成员列表页面
   router.push('/member-list')
 }
+// 导入数据（原有逻辑）
 function onImport() {
-  // 触发文件选择并导入
   const input = document.createElement('input')
   input.type = 'file'
   input.accept = '.json,application/json'
@@ -239,6 +251,18 @@ function onImport() {
     }
   }
   input.click()
+}
+
+// 导入测试数据
+async function onImportTestData() {
+  // 直接读取 /src/assets/test.json 并导入
+  const res = await fetch('/src/assets/test.json')
+  if (res.ok) {
+    const json = await res.json()
+    await importData(json)
+  } else {
+    alert('无法加载测试数据文件')
+  }
 }
 function onBackup() {
   alert('备份操作')
