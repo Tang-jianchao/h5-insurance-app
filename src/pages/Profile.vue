@@ -37,14 +37,28 @@
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ref } from 'vue'
+import { db } from '@/utils/db'
 
-// 模拟当前用户
 const currentUser = ref({
-  id: 'me',
-  name: '我自己',
-  relation: '投保人'
+  id: '',
+  name: '',
+  relation: ''
+})
+
+onMounted(async () => {
+  // 从db获取成员，过滤出“本人”
+  const members = await db.getAllMembers()
+  // 关系为“本人”或“我自己”
+  const me = members.find(m => m.relation === '本人' || m.relation === '我自己')
+  if (me) {
+    currentUser.value = me
+  } else if (members.length > 0) {
+    currentUser.value = members[0]
+  } else {
+    currentUser.value = { id: '', name: '未设置', relation: '' }
+  }
 })
 
 const avatarUrl =

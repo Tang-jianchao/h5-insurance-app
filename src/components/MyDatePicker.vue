@@ -4,9 +4,9 @@
       v-model="displayValue"
       :label="label"
       is-link
-      readonly
+      :readonly="true"
       :placeholder="placeholder"
-      @click="showPicker = true"
+      @click="!readonly && (showPicker = true)"
       :required="required"
     />
     <van-popup v-model:show="showPicker" position="bottom">
@@ -67,6 +67,10 @@ const props = defineProps({
       if (type === 'day') option.text += '日'
       return option
     }
+  },
+  readonly: {
+    type: Boolean,
+    default: false
   }
 })
 const emit = defineEmits(['update:modelValue'])
@@ -95,7 +99,6 @@ const displayValue = computed({
     // 禁止直接编辑
   }
 })
-
 
 function onConfirm(value) {
   let result = ''

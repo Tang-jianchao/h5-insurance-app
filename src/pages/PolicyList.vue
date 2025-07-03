@@ -19,10 +19,11 @@
         <van-tag
           v-for="member in members"
           :key="member.id"
-          :type="filter.member === member.id ? 'primary' : 'default'"
+          :type="filter.memberId == member.id ? 'primary' : 'default'"
           class="filter-tag"
-          @click="onFilterChange('member', member.id)"
+          @click="onFilterChange('memberId', member.id)"
           :round="true"
+          plain
         >
           {{ member.name }}
         </van-tag>
@@ -36,6 +37,7 @@
           class="filter-tag"
           @click="onFilterChange('type', type)"
           :round="true"
+          plain
         >
           {{ type }}
         </van-tag>
@@ -49,6 +51,7 @@
           class="filter-tag"
           @click="onFilterChange('status', status)"
           :round="true"
+          plain
         >
           {{ status }}
         </van-tag>
@@ -56,34 +59,31 @@
     </van-tabs>
 
     <!-- 保单卡片列表 -->
+
     <div class="cards">
-      <van-card
+      <van-swipe-cell
         v-for="policy in filteredPolicies"
         :key="policy.id"
-        :title="policy.name"
-        :desc="`投保人：${policy.policyHolder} | 被保人：${policy.insured} | 险种：${policy.policyType}`"
-        class="policy-card"
-        :footer="footerContent(policy)"
-        @click="onCardClick(policy)"
+        class="modern-card"
       >
-        <template #tags>
-          <van-tag
-            v-if="policy.renewable === true"
-            color="#07c160"
-            plain
-            round
-            style="margin-right: 4px"
-            >保证续保</van-tag
-          >
+        <template #left>
+          <van-button square type="primary" icon="edit" class="swipe-btn edit-btn" @click.stop="onEditPolicy(policy)" />
         </template>
-        <template #footer>
-          <div class="footer-info">
+        <template #right>
+          <van-button square type="danger" icon="delete" class="swipe-btn delete-btn" @click.stop="onDeletePolicy(policy)" />
+        </template>
+        <div class="card-content" @click="onCardClick(policy)">
+          <div class="card-header">
+            <div class="card-title">{{ policy.name }}</div>
+            <van-tag v-if="policy.renewable === true" color="#07c160" plain round>保证续保</van-tag>
+          </div>
+          <div class="card-desc">投保人：{{ policy.policyHolder }} | 被保人：{{ policy.insured }} | 险种：{{ policy.policyType }}</div>
+          <div class="card-footer">
             <span>保额: {{ policy.amount }} 万元</span>
             <span>起止: {{ policy.coveragePeriod }}</span>
           </div>
-        </template>
-      </van-card>
-
+        </div>
+      </van-swipe-cell>
       <div v-if="filteredPolicies.length === 0" class="empty-tip">
         无符合条件的保单
       </div>
@@ -102,17 +102,20 @@
 
 <script setup>
 
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { db } from '@/utils/db'
+import { showConfirmDialog, showToast } from 'vant'
+
 
 const router = useRouter()
+const route = useRoute()
 
 const searchText = ref('')
 const activeTab = ref('成员')
 
 const filter = ref({
-  member: '',
+  memberId: '',
   type: '',
   status: ''
 })
@@ -126,10 +129,14 @@ onMounted(async () => {
   // 获取成员
   members.value = await db.getAllMembers()
   // 获取保单
-  const allPolicies = JSON.parse(localStorage.getItem('policies') || '[]')
+  const allPolicies = await db.getAllPolicies()
   policies.value = allPolicies
   // 险种去重
   policyTypes.value = [...new Set(allPolicies.map(p => p.policyType).filter(Boolean))]
+  // 进入页面时从参数获取 memberId
+  if (route.query.memberId) {
+    filter.value.memberId = String(route.query.memberId)
+  }
 })
 
 // 过滤规则
@@ -139,7 +146,7 @@ const filteredPolicies = computed(() => {
       !searchText.value ||
       p.name?.includes(searchText.value) ||
       p.insured?.includes(searchText.value)
-    const matchMember = !filter.value.member || p.insured === filter.value.member
+    const matchMember = !filter.value.memberId || String(p.insuredMemberId) === String(filter.value.memberId)
     const matchType = !filter.value.type || p.policyType === filter.value.type
     // 状态字段可根据实际业务调整
     const matchStatus = !filter.value.status || p.status === filter.value.status
@@ -148,10 +155,10 @@ const filteredPolicies = computed(() => {
 })
 
 function onFilterChange(field, val) {
-  if (filter.value[field] === val) {
-    filter.value[field] = ''
+  if (field === 'memberId') {
+    filter.value.memberId = filter.value.memberId === val ? '' : val
   } else {
-    filter.value[field] = val
+    filter.value[field] = filter.value[field] === val ? '' : val
   }
 }
 
@@ -167,11 +174,31 @@ function onAddPolicy() {
   router.push('/add')
 }
 
+
 function onCardClick(policy) {
   // 跳转到新增保单页并传递保单详情，进入只读模式
   router.push({
     path: '/add',
     query: { ...policy, readonly: '1' }
+  })
+}
+
+function onEditPolicy(policy) {
+  // 跳转到编辑保单页
+  router.push({
+    path: '/add',
+    query: { ...policy, readonly: '0' }
+  })
+}
+
+function onDeletePolicy(policy) {
+    showConfirmDialog({
+    title: '确认删除',
+    message: `确定要删除保单「${policy.name}」吗？删除后无法恢复。`
+  }).then(async () => {
+    await db.deletePolicy(policy.id)
+     policies.value = policies.value.filter(p => p.id !== policy.id)
+    showToast('已删除')
   })
 }
 
@@ -195,32 +222,62 @@ function footerContent(policy) {
   cursor: pointer;
 }
 .cards {
-  margin-top: 12px;
+  margin-top: 0;
   background: #f7f8fa;
   border-radius: 14px;
   padding: 8px 0 4px 0;
 }
-.policy-card {
-  margin-bottom: 12px;
-  cursor: pointer;
-  border-radius: 12px;
+.cards:not(:first-child) {
+  margin-top: 12px;
+}
+.modern-card {
+  margin-bottom: 14px;
+  border-radius: 14px;
   box-shadow: 0 4px 16px 0 rgba(25,137,250,0.10), 0 1.5px 6px 0 rgba(0,0,0,0.06);
-  border: 1.5px solid #e3eaf5;
   background: #fff;
+  overflow: hidden;
   transition: box-shadow 0.2s, background 0.2s;
 }
-.policy-card:nth-child(odd) {
-  background: #f4f8ff;
+.modern-card .card-content {
+  padding: 18px 20px 14px 20px;
+  cursor: pointer;
 }
-.policy-card:hover {
-  box-shadow: 0 8px 24px 0 rgba(25,137,250,0.18), 0 2px 8px 0 rgba(0,0,0,0.10);
-  background: #e6f0ff;
+.modern-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
 }
-.footer-info {
-  font-size: 12px;
+.modern-card .card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #222;
+}
+.modern-card .card-desc {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.modern-card .card-footer {
+  font-size: 13px;
   color: #999;
   display: flex;
   justify-content: space-between;
+}
+.swipe-btn {
+  height: 100%;
+  border-radius: 0;
+  font-size: 18px;
+}
+.edit-btn {
+  background: #1989fa;
+  color: #fff;
+  border: none;
+}
+.delete-btn {
+  background: #ee0a24;
+  color: #fff;
+  border: none;
 }
 .empty-tip {
   text-align: center;

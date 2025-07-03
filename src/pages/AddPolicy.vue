@@ -145,7 +145,7 @@
           </template>
         </van-field>
       </van-cell-group>
-      <div class="upload-section">
+      <!-- <div class="upload-section">
         <div class="upload-label">电子保单附件</div>
         <van-uploader
           :after-read="onAttachmentUpload"
@@ -166,7 +166,7 @@
           :file-list="healthList"
           :disabled="readonly"
         />
-      </div>
+      </div> -->
       <van-button v-if="!readonly" round block type="primary" native-type="submit" class="submit-btn"
         >保存保单</van-button
       >
@@ -193,20 +193,22 @@ const formRef = ref(null)
 const showTypePicker = ref(false)
 const policyTypeOptions = POLICY_TYPES.map(opt => ({ text: opt.label, value: opt.code }))
 
-const form = reactive({
-  name: '',
-  company: '',
-  amount: null,
-  premium: null,
-  coverageStart: '',
-  coverageEnd: '',
-  policyHolder: '', // 投保人
-  insured: '', // 被保人
-  policyType: '',
-  renewable: null, // 布尔，是否保证续保
+const demoData = {
+  name: '车险A',
+  company: '平安保险',
+  policyHolder: 'Jason',
+  insuredMemberId: 1751463211963,
+  insured: 'Jason',
+  policyType: '车险',
+  amount: 50,
+  premium: 1200,
+  coverageStart: '2024-01-01',
+  coverageEnd: '2025-01-01',
+  renewable: true,
   attachmentBase64: '',
   healthBase64: ''
-})
+}
+const form = reactive(demoData)
 import { onMounted } from 'vue'
 import { db } from '@/utils/db'
 import { useRoute, useRouter } from 'vue-router'
@@ -221,7 +223,7 @@ const memberOptions = ref([])
 onMounted(async () => {
   // 从db获取家庭成员
   const members = await db.getAllMembers()
-  memberOptions.value = members.map(m => ({ text: m.name, value: m.name }))
+  memberOptions.value = members.map(m => ({ text: m.name, value: m.name, id: m.id }))
 
   if (route.query && Object.keys(route.query).length > 0) {
     readonly.value = !!route.query.readonly
@@ -234,6 +236,13 @@ onMounted(async () => {
         }
       }
     })
+    // 兼容 coveragePeriod 字符串（优先使用 coverageStart/coverageEnd）
+    if (!form.coverageStart && route.query.coveragePeriod) {
+      const arr = String(route.query.coveragePeriod).split(' 至 ')
+      form.coverageStart = arr[0] || ''
+      form.coverageEnd = arr[1] || ''
+    }
+    if (route.query.id) form.id = Number(route.query.id)
   }
 })
 
@@ -243,6 +252,8 @@ function onSelectPolicyHolder({ selectedValues, selectedOptions }) {
 }
 function onSelectInsured({ selectedValues, selectedOptions }) {
   form.insured = selectedOptions[0]?.text
+  // 保存被保人的 memberId
+  form.insuredMemberId = selectedOptions[0]?.id
   showInsuredPicker.value = false
 }
 
@@ -280,7 +291,7 @@ function onSelectPolicyType({ selectedValues, selectedOptions }) {
 function onSubmit() {
   formRef.value
     .validate()
-    .then(() => {
+    .then(async () => {
       if (!form.coverageStart || !form.coverageEnd) {
         showToast('请选择保障起止日期')
         return
@@ -289,25 +300,29 @@ function onSubmit() {
         showToast('请选择是否保证续保')
         return
       }
-      // 保存到 localStorage 示例
-      const savedPolicies =
-        JSON.parse(localStorage.getItem('policies') || '[]') || []
-      savedPolicies.push({
-        id: Date.now(),
+      // db存储，保留原始 coverageStart/coverageEnd
+      const policyData = {
+        id: form.id || Date.now(),
         name: form.name,
         company: form.company,
         amount: form.amount,
         premium: form.premium,
+        coverageStart: form.coverageStart,
+        coverageEnd: form.coverageEnd,
         coveragePeriod: `${form.coverageStart} 至 ${form.coverageEnd}`,
         policyHolder: form.policyHolder,
         insured: form.insured,
+        insuredMemberId: form.insuredMemberId || null,
         policyType: form.policyType,
         renewable: form.renewable,
         attachmentBase64: form.attachmentBase64,
         healthBase64: form.healthBase64
-      })
-      localStorage.setItem('policies', JSON.stringify(savedPolicies))
-
+      }
+      if (form.id) {
+        await db.updatePolicy(policyData)
+      } else {
+        await db.addPolicy(policyData)
+      }
       showToast('保单保存成功')
       onBack()
     })
@@ -323,18 +338,17 @@ function onEdit() {
   readonly.value = false
 }
 function onDelete() {
-  const id = route.query.id
+  const id = Number(form.id || route.query.id)
   if (!id) {
     showToast('缺少保单ID，无法删除')
     return
   }
-  let savedPolicies = JSON.parse(localStorage.getItem('policies') || '[]')
-  savedPolicies = savedPolicies.filter(p => String(p.id) !== String(id))
-  localStorage.setItem('policies', JSON.stringify(savedPolicies))
-  showToast('保单已删除')
-  setTimeout(() => {
-    router.replace('/policy-list')
-  }, 600)
+  db.deletePolicy(id).then(() => {
+    showToast('保单已删除')
+    setTimeout(() => {
+      router.replace('/policy-list')
+    }, 600)
+  })
 }
 </script>
 

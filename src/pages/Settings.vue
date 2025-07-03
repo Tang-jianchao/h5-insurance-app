@@ -73,6 +73,8 @@
 <script setup>
 import { ref } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
+import { db } from '@/utils/db'
+import { importData } from '@/utils/importData'
 
 // 提醒设置
 const reminderDays = ref({
@@ -84,13 +86,19 @@ const reminderDays = ref({
 const pinCode = ref(localStorage.getItem('pinCode') || '')
 
 // 导出 JSON
-function exportJson() {
-  const data = localStorage.getItem('policies') || '[]'
+async function exportJson() {
+  // 从db获取所有数据
+  const [members, policies, images] = await Promise.all([
+    db.getAllMembers(),
+    db.getAllPolicies(),
+    db.getAllImages()
+  ])
+  const data = JSON.stringify({ members, policies, images }, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = '保单数据备份.json'
+  a.download = '保险数据备份.json'
   a.click()
   URL.revokeObjectURL(url)
   showToast('已导出 JSON')
@@ -103,15 +111,10 @@ function exportPdf() {
 }
 
 // 导入文件
-function onImportFile(file) {
-  const reader = new FileReader()
-  reader.onload = () => {
-    const content = reader.result
-    // 实际使用 XLSX 解析字段：比如 xlsx.read(content, { type: 'binary' })
-    console.log('导入内容：', content)
-    showToast('文件已读取，待解析字段')
+async function onImportFile(file) {
+  if (file && file.file) {
+    await importData(file.file)
   }
-  reader.readAsText(file.file)
 }
 
 // 保存提醒设置

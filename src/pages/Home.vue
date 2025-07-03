@@ -117,15 +117,16 @@ import { onMounted, ref } from 'vue'
 import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
 import { db } from '@/utils/db'
+import { importData } from '@/utils/importData'
 
 const router = useRouter()
 
 const members = ref([])
 
 const stats = ref({
-  total: 12,
-  active: 9,
-  expiring: 2
+  total: 0,
+  active: 0,
+  expiring: 0
 })
 
 const reminders = ref([
@@ -150,13 +151,57 @@ const reminders = ref([
 onMounted(async () => {
   // 从db获取成员
   members.value = await db.getAllMembers()
+  // 从db获取保单
+  const policies = await db.getAllPolicies()
+  const now = new Date()
+  stats.value.total = policies.length
+  stats.value.active = policies.filter(p => {
+    // 只要当前日期小于 coverageEnd 即为生效中
+    if (!p.coverageEnd) return false
+    const end = new Date(p.coverageEnd)
+    return now < end
+  }).length
+  stats.value.expiring = policies.filter(p => {
+    if (!p.coverageEnd) return false
+    const end = new Date(p.coverageEnd)
+    const diff = (end - now) / (1000 * 60 * 60 * 24)
+    return diff > 0 && diff <= 7
+  }).length
+
+  // 图表数据处理
+  // 成员名列表
+  const categories = members.value.map(m => m.name)
+  // 险种列表（去重）
+  const policyTypes = [...new Set(policies.map(p => p.policyType).filter(Boolean))]
+
+  // 保费分布数据
+  const feeSeries = policyTypes.map(type => ({
+    name: type,
+    type: 'bar',
+    stack: 'total',
+    data: categories.map(memberName => {
+      // 该成员该险种的保费总和
+      return policies
+        .filter(p => p.insured === memberName && p.policyType === type)
+        .reduce((sum, p) => sum + (Number(p.premium) || 0), 0)
+    })
+  }))
+
+  // 保额分布数据
+  const amountSeries = policyTypes.map(type => ({
+    name: type,
+    type: 'bar',
+    stack: 'total',
+    data: categories.map(memberName => {
+      return policies
+        .filter(p => p.insured === memberName && p.policyType === type)
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+    })
+  }))
+
   // 图表初始化
   const feeChart = echarts.init(document.getElementById('chart-fee'))
   const amountChart = echarts.init(document.getElementById('chart-amount'))
-
-  // 用成员真实姓名
-  const categories = members.value.map(m => m.name)
-  const policyTypes = ['车险', '医疗险', '寿险']
 
   feeChart.setOption({
     title: { text: '保费分布（元）', left: 'center', textStyle: { fontSize: 14 } },
@@ -164,12 +209,7 @@ onMounted(async () => {
     legend: { data: policyTypes, bottom: 0 },
     xAxis: { type: 'category', data: categories },
     yAxis: { type: 'value' },
-    series: policyTypes.map((type) => ({
-      name: type,
-      type: 'bar',
-      stack: 'total',
-      data: categories.map(() => Math.floor(Math.random() * 2000) + 500)
-    }))
+    series: feeSeries
   })
 
   amountChart.setOption({
@@ -178,23 +218,27 @@ onMounted(async () => {
     legend: { data: policyTypes, bottom: 0 },
     xAxis: { type: 'category', data: categories },
     yAxis: { type: 'value' },
-    series: policyTypes.map((type) => ({
-      name: type,
-      type: 'bar',
-      stack: 'total',
-      data: categories.map(() => Math.floor(Math.random() * 50) + 10)
-    }))
+    series: amountSeries
   })
 })
 
 // 事件处理
 function goToMember(id) {
-  // 这里使用路由跳转，比如：
-  // router.push(`/member/${id}`)
-  alert(`跳转家庭成员页面：${id}`)
+  // 跳转到成员列表页面
+  router.push('/member-list')
 }
 function onImport() {
-  alert('导入保单操作')
+  // 触发文件选择并导入
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json,application/json'
+  input.onchange = async (e) => {
+    const file = e.target.files[0]
+    if (file) {
+      await importData(file)
+    }
+  }
+  input.click()
 }
 function onBackup() {
   alert('备份操作')

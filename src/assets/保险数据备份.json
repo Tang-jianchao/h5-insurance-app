@@ -1,0 +1,57 @@
+{
+  "members": [
+    {
+      "id": 1751463211963,
+      "name": "Jason",
+      "gender": "男",
+      "birth": "1992-02-01",
+      "relation": "本人",
+      "policyCount": 0
+    },
+    {
+      "id": 1751553364479,
+      "name": "tqy",
+      "gender": "女",
+      "birth": "1993-07-19",
+      "relation": "配偶",
+      "policyCount": 0
+    }
+  ],
+  "policies": [
+    {
+      "id": 1751551538363,
+      "name": "移动通讯费(202406-202409)",
+      "company": "测试公司1222",
+      "amount": "22",
+      "premium": 1100,
+      "coverageStart": "2000-01-01",
+      "coverageEnd": "2000-01-01",
+      "coveragePeriod": "2000-01-01 至 2000-01-01",
+      "policyHolder": "Jason",
+      "insured": "Jason",
+      "insuredMemberId": "1751463211963",
+      "policyType": "重疾险",
+      "renewable": true,
+      "attachmentBase64": "",
+      "healthBase64": ""
+    },
+    {
+      "id": 1751555783284,
+      "name": "车险A",
+      "company": "平安保险",
+      "amount": 50,
+      "premium": 1200,
+      "coverageStart": "2024-01-01",
+      "coverageEnd": "2025-01-01",
+      "coveragePeriod": "2024-01-01 至 2025-01-01",
+      "policyHolder": "Jason",
+      "insured": "tqy",
+      "insuredMemberId": 1751553364479,
+      "policyType": "意外险",
+      "renewable": true,
+      "attachmentBase64": "",
+      "healthBase64": ""
+    }
+  ],
+  "images": []
+}

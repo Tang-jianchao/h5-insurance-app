@@ -4,18 +4,24 @@
 
     <div class="card-list">
       <template v-if="members.length > 0">
-        <van-card v-for="member in members" :key="member.id" :title="member.name"
-          :desc="`${member.relation} / ${member.gender} / ${member.birth}`" class="member-card styled-card">
-          <template #tags>
-            <van-tag plain round type="primary" @click="viewPolicies(member.id)">
-              保单：{{ member.policyCount }}
-            </van-tag>
+        <van-swipe-cell v-for="member in members" :key="member.id" class="modern-card">
+          <template #left>
+            <van-button square type="primary" icon="edit" class="swipe-btn edit-btn" @click.stop="editMember(member)" />
           </template>
-          <template #num>
-            <van-icon name="edit" @click="editMember(member)" class="icon-btn" />
-            <van-icon name="delete" @click="deleteMember(member.id)" class="icon-btn delete" />
+          <template #right>
+            <van-button square type="danger" icon="delete" class="swipe-btn delete-btn"
+              @click.stop="onDeleteMember(member)" />
           </template>
-        </van-card>
+          <div class="card-content" @click="editMember(member)">
+            <div class="card-header">
+              <div class="card-title">{{ member.name }}</div>
+              <van-tag plain round type="primary" @click.stop="viewPolicies(member.id)">
+                保单：{{ member.policyCount }}
+              </van-tag>
+            </div>
+            <div class="card-desc">{{ member.relation }} / {{ member.gender }} / {{ member.birth }}</div>
+          </div>
+        </van-swipe-cell>
       </template>
       <template v-else>
         <van-empty description="暂无成员" />
@@ -35,15 +41,10 @@
             <van-picker :columns="genderOptions" :model-value="genderPickerValue" @confirm="onSelectGender"
               @cancel="showGenderPicker = false" />
           </van-popup>
-          <MyDatePicker
-            v-model="form.birth"
-            label="出生日期"
-            :required="true"
-            :min-date="minDate"
-            :max-date="maxDate"
-            :columns-type="['year', 'month', 'day']"
-          />
-          <van-field v-model="form.relation" is-link readonly name="relationPicker" label="关系" placeholder="请选择关系" @click="showRelationPicker = true" required />
+          <MyDatePicker v-model="form.birth" label="出生日期" :required="true" :min-date="minDate" :max-date="maxDate"
+            :columns-type="['year', 'month', 'day']" />
+          <van-field v-model="form.relation" is-link readonly name="relationPicker" label="关系" placeholder="请选择关系"
+            @click="showRelationPicker = true" required />
           <van-popup v-model:show="showRelationPicker" destroy-on-close position="bottom">
             <van-picker :columns="relationOptions" :model-value="relationPickerValue" @confirm="onSelectRelation"
               @cancel="showRelationPicker = false" />
@@ -61,9 +62,6 @@
       <van-picker :columns="genderOptions" @confirm="onSelectGender" @cancel="showGenderPicker = false" />
     </van-popup>
 
-
-    <!-- 出生日期选择（已用DatePicker替换） -->
-
   </div>
 </template>
 
@@ -72,17 +70,18 @@ import { ref, onMounted } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
 import { GENDER_OPTIONS, RELATION_OPTIONS } from '@/utils/constant'
 import { db } from '@/utils/db'
+import { useRouter } from 'vue-router'
+
 import MyDatePicker from '@/components/MyDatePicker.vue'
-const columnsType = ['year', 'month', 'day'];
 const datePickerValue = ref([])
+const router = useRouter()
 
 const members = ref([])
+const policies = ref([])
 const genderPickerValue = ref([])
 const relationPickerValue = ref([])
 
 const showAdd = ref(false)
-const showGender = ref(false)
-const showDate = ref(false)
 const editingId = ref(null)
 const showGenderPicker = ref(false)
 const showRelationPicker = ref(false)
@@ -103,8 +102,8 @@ function resetForm() {
 }
 
 function viewPolicies(memberId) {
-  alert(`跳转查看成员 ${memberId} 名下保单`)
-  // router.push(`/policies?memberId=${memberId}`)
+  //跳转到保单页面 并设置merberId为当前成员
+  router.push(`/policy-list?memberId=${memberId}`)
 }
 
 function showAddMember() {
@@ -113,6 +112,22 @@ function showAddMember() {
   datePickerValue.value = []
   console.log('打开弹窗')
   showAdd.value = true
+}
+
+async function onDeleteMember(member) {
+  showConfirmDialog({
+    title: '确认删除',
+    message: `确定要删除成员「${member.name}」吗？删除后无法恢复。`
+  }).then(async () => {
+    await db.deleteMember(member.id)
+    members.value = members.value.filter((m) => m.id !== member.id)
+    showToast('已删除')
+  })
+}
+
+function onCardClick(member) {
+  // 可扩展为成员详情弹窗或页面
+  showToast(`成员：${member.name}`)
 }
 
 function editMember(member) {
@@ -137,19 +152,22 @@ async function onSubmit() {
     // 编辑
     const index = members.value.findIndex((m) => m.id === editingId.value)
     if (index !== -1) {
-      const updated = { ...form.value, id: editingId.value, policyCount: members.value[index].policyCount }
+      const updated = { ...form.value, id: editingId.value }
       await db.updateMember(updated)
-      members.value[index] = updated
+      // 重新统计保单数量
+      const count = policies.value.filter(p => p.insured === updated.name).length
+      members.value[index] = { ...updated, policyCount: count }
     }
   } else {
     // 新增
     const newMember = {
       ...form.value,
-      id: Date.now(),
-      policyCount: 0
+      id: Date.now()
     }
     await db.addMember(newMember)
-    members.value.push(newMember)
+    // 重新统计保单数量
+    const count = policies.value.filter(p => p.insured === newMember.name).length
+    members.value.push({ ...newMember, policyCount: count })
   }
 
   showAdd.value = false
@@ -158,16 +176,19 @@ async function onSubmit() {
   showToast('保存成功')
 }
 
-async function deleteMember(id) {
-  showConfirmDialog({
-    title: '确认删除',
-    message: '删除后无法恢复，是否继续？'
-  }).then(async () => {
-    await db.deleteMember(id)
-    members.value = members.value.filter((m) => m.id !== id)
-    showToast('已删除')
+// 页面加载时从db获取成员和保单列表，并统计每个成员的保单数量
+onMounted(async () => {
+  const [allMembers, allPolicies] = await Promise.all([
+    db.getAllMembers(),
+    db.getAllPolicies()
+  ])
+  policies.value = allPolicies
+  // 统计每个成员的保单数量（被保人名字匹配）
+  members.value = allMembers.map(member => {
+    const count = allPolicies.filter(p => p.insured === member.name).length
+    return { ...member, policyCount: count }
   })
-}
+})
 
 function onSelectGender({ selectedValues, selectedOptions }) {
   genderPickerValue.value = selectedValues
@@ -190,11 +211,6 @@ function getGenderLabel(code) {
   const opt = genderOptions.find(opt => opt.value === code)
   return opt ? opt.text : ''
 }
-
-// 页面加载时从db获取成员列表
-onMounted(async () => {
-  members.value = await db.getAllMembers()
-})
 </script>
 
 <style scoped>
@@ -262,5 +278,48 @@ onMounted(async () => {
 
 .form-submit {
   margin-top: 20px;
+}
+.modern-card {
+  margin-bottom: 14px;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px 0 rgba(25,137,250,0.10), 0 1.5px 6px 0 rgba(0,0,0,0.06);
+  background: #fff;
+  overflow: hidden;
+  transition: box-shadow 0.2s, background 0.2s;
+}
+.modern-card .card-content {
+  padding: 18px 20px 14px 20px;
+  cursor: pointer;
+}
+.modern-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.modern-card .card-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #222;
+}
+.modern-card .card-desc {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+.swipe-btn {
+  height: 100%;
+  border-radius: 0;
+  font-size: 18px;
+}
+.edit-btn {
+  background: #1989fa;
+  color: #fff;
+  border: none;
+}
+.delete-btn {
+  background: #ee0a24;
+  color: #fff;
+  border: none;
 }
 </style>
