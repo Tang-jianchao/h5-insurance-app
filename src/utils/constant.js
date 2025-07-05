@@ -39,12 +39,12 @@ export const GENDER_OPTIONS = [
 
 // 保险险种常量
 export const POLICY_TYPES = [
-  { label: '车险', code: 1 },
   { label: '医疗险', code: 2 },
+  { label: '重疾险', code: 5 },
   { label: '寿险', code: 3 },
   { label: '意外险', code: 4 },
-  { label: '重疾险', code: 5 },
+  { label: '车险', code: 1 },
+  { label: '防癌险', code: 7 },
   { label: '养老险', code: 6 },
-  // { label: '教育金', code: 7 },
   { label: '旅行险', code: 8 }
 ]

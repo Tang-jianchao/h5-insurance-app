@@ -66,11 +66,17 @@ import { usePolicyStore } from '@/stores/policyStore'
 import { useImageStore } from '@/stores/imageStore'
 import { useSettingStore } from '@/stores/settingStore'
 import { storeToRefs } from 'pinia'
-import { importData } from '@/utils/importData'
+// import { importData } from '@/utils/importData'
 
 // 提醒设置
+import { computed } from 'vue'
 const settingStore = useSettingStore()
-const reminderDays = ref(settingStore.getReminderDays())
+const reminderDays = computed({
+  get: () => settingStore.reminderDays,
+  set: (val) => {
+    settingStore.reminderDays = val
+  }
+})
 
 // 加密保护
 const pinCode = ref(localStorage.getItem('pinCode') || '')

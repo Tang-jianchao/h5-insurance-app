@@ -10,13 +10,19 @@
 </template>
 
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { useSettingStore } from '@/stores/settingStore'
 
 const active = ref('/')
 const route = useRoute()
 const showTabbarList = ['/policy-list', '/', '/member-list','/profile']
 const showTabbar = computed(() => showTabbarList.includes(route.path))
+
+// 初始化设置
+onMounted(() => {
+  useSettingStore().loadSetting()
+})
 
 // 同步 TabBar 选中状态
 watch(

@@ -54,15 +54,18 @@
         <div class="card-content" @click="onCardClick(policy)">
           <div class="card-header">
             <div class="card-title">{{ policy.name }}</div>
+            <!-- 险种tag已隐藏 -->
+          </div>
+          <div class="card-desc">
+            投保人：{{ policy.policyHolder }} | 被保人：{{ policy.insured }} |
             <van-tag
               v-if="policy.policyType"
               :style="{ color: getPolicyTypeColor(policy.policyType), borderColor: getPolicyTypeColor(policy.policyType) }"
-              plain round class="type-tag"
+              plain round class="type-tag inline-type-tag"
             >
               {{ policy.policyType }}
             </van-tag>
           </div>
-          <div class="card-desc">投保人：{{ policy.policyHolder }} | 被保人：{{ policy.insured }} | 险种：{{ policy.policyType }}</div>
           <div class="card-footer">
             <span>保额: {{ policy.amount }} 万元</span>
             <span>起止: {{ policy.coveragePeriod }}</span>
@@ -262,6 +265,9 @@ function footerContent(policy) {
   font-size: 18px;
   font-weight: 600;
   color: #222;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .modern-card .card-desc {
   font-size: 14px;
@@ -320,5 +326,15 @@ function footerContent(policy) {
   height: 22px;
   line-height: 20px;
   border-radius: 12px;
+  min-width: 60px;
+  white-space: nowrap;
+  text-align: center;
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.inline-type-tag {
+  margin-left: 4px;
+  vertical-align: middle;
 }
 </style>

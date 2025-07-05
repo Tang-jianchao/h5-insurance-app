@@ -23,6 +23,16 @@ export const usePolicyStore = defineStore('policy', {
     },
     setPolicies(list) {
       this.policies = list
+    },
+
+    /**
+     * 检查是否存在相同被保人和保险类型的保单
+     * @param {string} policyHolder 被保人姓名
+     * @param {string} policyType 保险类型（名称）
+     * @returns {boolean}
+     */
+    checkSamePolicy(insured, policyType) {
+      return this.policies.some(p => p.insured === insured && p.policyType === policyType)
     }
   }
 })

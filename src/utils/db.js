@@ -1,7 +1,7 @@
 import { openDB } from 'idb'
 
 
-const dbPromise = openDB('insurance-db', 3, {
+const dbPromise = openDB('insurance-db', 4, {
   upgrade(db, oldVersion) {
     if (!db.objectStoreNames.contains('images')) {
       db.createObjectStore('images', { keyPath: 'id', autoIncrement: true })
@@ -11,6 +11,9 @@ const dbPromise = openDB('insurance-db', 3, {
     }
     if (!db.objectStoreNames.contains('policies')) {
       db.createObjectStore('policies', { keyPath: 'id' })
+    }
+    if (!db.objectStoreNames.contains('settings')) {
+      db.createObjectStore('settings', { keyPath: 'key' })
     }
   }
 })
@@ -63,5 +66,22 @@ export const db = {
   },
   async clearPolicies() {
     return (await dbPromise).clear('policies')
-  }
+  },
+
+  // settings 表
+  async setSetting(key, value) {
+    return (await dbPromise).put('settings', { key, value })
+  },
+  async getSetting(key) {
+    return (await dbPromise).get('settings', key)
+  },
+  async getAllSettings() {
+    return (await dbPromise).getAll('settings')
+  },
+  async deleteSetting(key) {
+    return (await dbPromise).delete('settings', key)
+  },
+  async clearSettings() {
+    return (await dbPromise).clear('settings')
+  },
 }

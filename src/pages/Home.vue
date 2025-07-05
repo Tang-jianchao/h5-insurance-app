@@ -140,10 +140,47 @@ const totalAmount = computed(() => {
   return policies.value.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
 })
 
-const stats = ref({
-  total: 0,
-  active: 0,
-  expiring: 0
+// 保单状态统计和重要提醒整合
+const stats = computed(() => {
+  const now = new Date()
+  const { waiting, expiry } = settingStore.getReminderDays()
+  let total = policies.value.length
+  let active = 0
+  let expiring = 0
+  let remindersArr = []
+  policies.value.forEach(p => {
+    // 生效中
+    if (p.coverageEnd) {
+      const end = new Date(p.coverageEnd)
+      if (now < end) active++
+      const diff = (end - now) / (1000 * 60 * 60 * 24)
+      if (diff > 0 && diff <= expiry) {
+        expiring++
+        remindersArr.push({
+          id: 'expiring-' + p.id,
+          title: `${p.insured}的${p.policyName || p.policyType || '保单'}即将到期`,
+          desc: `距离到期还有${Math.ceil(diff)}天`,
+          icon: 'warning-o',
+          color: '#FF5722'
+        })
+      }
+    }
+    // 等待期即将结束
+    if (p.waitingEnd) {
+      const wend = new Date(p.waitingEnd)
+      const wdiff = (wend - now) / (1000 * 60 * 60 * 24)
+      if (wdiff > 0 && wdiff <= waiting) {
+        remindersArr.push({
+          id: 'waiting-' + p.id,
+          title: `${p.insured}的${p.policyName || p.policyType || '保单'}等待期即将结束`,
+          desc: `等待期将于${Math.ceil(wdiff)}天后结束`,
+          icon: 'clock-o',
+          color: '#FF9800'
+        })
+      }
+    }
+  })
+  return { total, active, expiring, reminders: remindersArr }
 })
 // 饼图数据响应式
 const feePieData = ref([])
@@ -174,38 +211,8 @@ function onActionSelect(action) {
   }
 }
 
-// 重要提醒：根据真实业务数据生成
-const reminders = computed(() => {
-  const now = new Date()
-  const { waiting, expiry } = settingStore.getReminderDays()
-  // 即将到期保单（自定义天数内）
-  const expiring = policies.value.filter(p => {
-    if (!p.coverageEnd) return false
-    const end = new Date(p.coverageEnd)
-    const diff = (end - now) / (1000 * 60 * 60 * 24)
-    return diff > 0 && diff <= expiry
-  }).map(p => ({
-    id: 'expiring-' + p.id,
-    title: `${p.insured}的${p.policyName || p.policyType || '保单'}即将到期`,
-    desc: `距离到期还有${Math.ceil((new Date(p.coverageEnd) - now) / (1000 * 60 * 60 * 24))}天`,
-    icon: 'warning-o',
-    color: '#FF5722'
-  }))
-  // 等待期即将结束（自定义天数内）
-  const waitingArr = policies.value.filter(p => {
-    if (!p.waitingEnd) return false
-    const end = new Date(p.waitingEnd)
-    const diff = (end - now) / (1000 * 60 * 60 * 24)
-    return diff > 0 && diff <= waiting
-  }).map(p => ({
-    id: 'waiting-' + p.id,
-    title: `${p.insured}的${p.policyName || p.policyType || '保单'}等待期即将结束`,
-    desc: `等待期将于${Math.ceil((new Date(p.waitingEnd) - now) / (1000 * 60 * 60 * 24))}天后结束`,
-    icon: 'clock-o',
-    color: '#FF9800'
-  }))
-  return [...expiring, ...waitingArr]
-})
+// 重要提醒直接用 stats.computed
+const reminders = computed(() => stats.value.reminders)
 
 
 // 图表初始化和成员数据加载
@@ -213,28 +220,15 @@ onMounted(async () => {
   // 从store获取成员和保单
   await memberStore.fetchMembers()
   await policyStore.fetchPolicies()
-  const now = new Date()
-  const policies = policyStore.policies
-  stats.value.total = policies.length
-  stats.value.active = policies.filter(p => {
-    if (!p.coverageEnd) return false
-    const end = new Date(p.coverageEnd)
-    return now < end
-  }).length
-  stats.value.expiring = policies.filter(p => {
-    if (!p.coverageEnd) return false
-    const end = new Date(p.coverageEnd)
-    const diff = (end - now) / (1000 * 60 * 60 * 24)
-    return diff > 0 && diff <= 7
-  }).length
-
   // 图表数据处理
+  const now = new Date()
+  const policiesArr = policyStore.policies
   const categories = members.value.map(m => m.name)
-  const policyTypes = [...new Set(policies.map(p => p.policyType).filter(Boolean))]
+  const policyTypes = [...new Set(policiesArr.map(p => p.policyType).filter(Boolean))]
 
   // 保费分布饼状图数据（以家庭成员为维度，过滤为0的数据）
   feePieData.value = categories.map(memberName => {
-    const value = policies
+    const value = policiesArr
       .filter(p => p.insured === memberName)
       .reduce((sum, p) => sum + (Number(p.premium) || 0), 0)
     return {
@@ -249,7 +243,7 @@ onMounted(async () => {
     type: 'bar',
     stack: 'total',
     data: categories.map(memberName => {
-      return policies
+      return policiesArr
         .filter(p => p.insured === memberName && p.policyType === type)
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     })

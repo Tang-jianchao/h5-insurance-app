@@ -1,7 +1,7 @@
 <template>
   <div class="add-policy">
     <van-nav-bar
-      title="添加新保单"
+      :title="pageTitle"
       fixed
       safe-area-inset-top
       left-arrow
@@ -159,6 +159,18 @@
             </van-radio-group>
           </template>
         </van-field>
+        <!-- 备注 -->
+        <van-field
+          v-model="form.remark"
+          name="remark"
+          label="备注"
+          type="textarea"
+          :readonly="readonly"
+          :placeholder="readonly ? '' : '请输入备注，可选'"
+          autosize
+          maxlength="500"
+          show-word-limit
+        />
       </van-cell-group>
       <!-- <div class="upload-section">
         <div class="upload-label">电子保单附件</div>
@@ -214,6 +226,9 @@ import { POLICY_TYPES, POLICY_STATUS_OPTIONS } from '@/utils/constant'
 
 const formRef = ref(null)
 
+// 页面标题逻辑
+const pageTitle = ref('')
+
 // 保单状态映射
 function getStatusLabel(code) {
   const opt = POLICY_STATUS_OPTIONS.find(opt => String(opt.code) === String(code))
@@ -236,11 +251,29 @@ const demoData = {
   coverageEnd: '2025-01-01',
   renewable: true,
   attachmentBase64: '',
-  healthBase64: ''
+  healthBase64: '',
+  remark: '',
+  status: '' // 保单状态字段，存储code
+}
+const emptyData = {
+  name: '',
+  company: '',
+  policyHolder: '',
+  insuredMemberId: '',
+  insured: '',
+  policyType: '',
+  amount: '',
+  premium: '',
+  coverageStart: '',
+  coverageEnd: '',
+  renewable: '',
+  attachmentBase64: '',
+  healthBase64: '',
+  remark: '',
+  status: ''
 }
 const form = reactive({
-  ...demoData,
-  status: '' // 保单状态字段，存储code
+  ...emptyData,
 })
 import { watch } from 'vue'
 // 计算保单状态（返回code）
@@ -277,6 +310,8 @@ onMounted(async () => {
   const members = await import('@/stores/memberStore').then(m => m.useMemberStore().members)
   memberOptions.value = members.map(m => ({ text: m.name, value: m.name, id: m.id }))
 
+  // 判断页面模式
+  let mode = 'add'
   if (route.query && Object.keys(route.query).length > 0) {
     readonly.value = !!route.query.readonly
     Object.keys(form).forEach(key => {
@@ -295,7 +330,13 @@ onMounted(async () => {
       form.coverageEnd = arr[1] || ''
     }
     if (route.query.id) form.id = Number(route.query.id)
+    if (readonly.value) {
+      mode = 'view'
+    } else {
+      mode = 'edit'
+    }
   }
+  pageTitle.value = mode === 'view' ? '保单详情' : (mode === 'edit' ? '编辑保单' : '新增保单')
 })
 
 function onSelectPolicyHolder({ selectedValues, selectedOptions }) {
@@ -340,6 +381,7 @@ function onSelectPolicyType({ selectedValues, selectedOptions }) {
   showTypePicker.value = false
 }
 
+import { showConfirmDialog } from 'vant'
 function onSubmit() {
   formRef.value
     .validate()
@@ -352,32 +394,48 @@ function onSubmit() {
         showToast('请选择是否保证续保')
         return
       }
-      // store存储，保留原始 coverageStart/coverageEnd
-      const policyData = {
-        id: form.id || Date.now(),
-        name: form.name,
-        company: form.company,
-        amount: form.amount,
-        premium: form.premium,
-        coverageStart: form.coverageStart,
-        coverageEnd: form.coverageEnd,
-        coveragePeriod: `${form.coverageStart} 至 ${form.coverageEnd}`,
-        policyHolder: form.policyHolder,
-        insured: form.insured,
-        insuredMemberId: form.insuredMemberId || null,
-        policyType: form.policyType,
-        renewable: form.renewable,
-        status: form.status, // 存储code
-        attachmentBase64: form.attachmentBase64,
-        healthBase64: form.healthBase64
+      // 检查是否有相同保单
+      const hasSame = policyStore.checkSamePolicy(form.insured, form.policyType)
+      const savePolicy = async () => {
+        const policyData = {
+          id: form.id || Date.now(),
+          name: form.name,
+          company: form.company,
+          amount: form.amount,
+          premium: form.premium,
+          coverageStart: form.coverageStart,
+          coverageEnd: form.coverageEnd,
+          coveragePeriod: `${form.coverageStart} 至 ${form.coverageEnd}`,
+          policyHolder: form.policyHolder,
+          insured: form.insured,
+          insuredMemberId: form.insuredMemberId || null,
+          policyType: form.policyType,
+          renewable: form.renewable,
+          status: form.status, // 存储code
+          attachmentBase64: form.attachmentBase64,
+          healthBase64: form.healthBase64,
+          remark: form.remark || ''
+        }
+        if (form.id) {
+          await policyStore.updatePolicy(policyData)
+        } else {
+          await policyStore.addPolicy(policyData)
+        }
+        showToast('保单保存成功')
+        onBack()
       }
-      if (form.id) {
-        await policyStore.updatePolicy(policyData)
+      // 只在新增时校验
+      if (!form.id && hasSame ) {
+        showConfirmDialog({
+          title: '提示',
+          message: '已存在相同投保人和险种的保单，是否继续保存？'
+        }).then(() => {
+          savePolicy()
+        })
+        .catch(() => {})
       } else {
-        await policyStore.addPolicy(policyData)
+        await savePolicy()
       }
-      showToast('保单保存成功')
-      onBack()
     })
     .catch(() => {
       showToast('请完善表单信息')
@@ -389,6 +447,7 @@ function onBack() {
 }
 function onEdit() {
   readonly.value = false
+  pageTitle.value = '编辑保单'
 }
 function onDelete() {
   const id = Number(form.id || route.query.id)
