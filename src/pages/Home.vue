@@ -53,122 +53,164 @@
 
     <!-- 保费与保额图表 -->
     <section class="section charts">
-      <h3>保费与保额</h3>
-      <div id="chart-fee" class="chart"></div>
-      <div id="chart-amount" class="chart"></div>
+      <div class="chart-title chart-title-fee flex-row-between">
+        <span>保费分布（元）</span>
+        <span class="chart-title-total highlight-green">总保费：{{ totalFee }} 元</span>
+      </div>
+      <FeePieChart :data="feePieData" />
+      <div class="chart-title chart-title-amount flex-row-between">
+        <span>保额分布（万元）</span>
+        <span class="chart-title-total highlight-green">总保额：{{ totalAmount }} 万元</span>
+      </div>
+      <BaseBarChart :data="barChartData" :chartConfig="barChartConfig" chart-id="chart-amount" />
+
     </section>
 
-    <!-- 重要提醒 -->
-    <section class="section reminders">
-      <h3>重要提醒</h3>
-      <van-list>
-        <van-cell
+    <!-- 重要提醒 NoticeBar 顶部展示，无标题 -->
+    <div class="reminders-top">
+      <div v-if="reminders.length > 0">
+        <van-notice-bar
           v-for="remind in reminders"
           :key="remind.id"
-          :title="remind.title"
-          :label="remind.desc"
-          :icon="remind.icon"
-          :style="{ color: remind.color }"
+          :text="remind.title + '，' + remind.desc"
+          :color="remind.color"
+          :left-icon="remind.icon"
+          wrapable
+          class="remind-notice"
         />
-        <div v-if="reminders.length === 0" class="empty-tip">暂无提醒</div>
-      </van-list>
-    </section>
+      </div>
+      <!-- <div v-else class="empty-tip">顺风顺水</div> -->
+    </div>
 
-    <!-- 快捷操作按钮 -->
-    <section class="section quick-actions">
+
+    <!-- 底部浮动操作按钮组 -->
+    <van-action-sheet
+      v-model:show="showActionSheet"
+      :actions="actionSheetActions"
+      @select="onActionSelect"
+      cancel-text="取消"
+      close-on-click-action
+    />
+    <div class="fab-container">
       <van-button
         type="primary"
-        icon="plus"
-        block
+        icon="like"
+        class="fab-btn"
+        @click="showActionSheet = true"
         round
-        class="action-btn"
-        @click="onAddPolicy"
-      >
-        添加保单
-      </van-button>
-      <div style="display: flex; gap: 12px; margin-bottom: 12px;">
-        <van-button
-          type="info"
-          icon="notes-o"
-          block
-          round
-          style="flex:1"
-          @click="onImportTestData"
-        >
-          测试数据
-        </van-button>
-        <van-button
-          type="info"
-          icon="upload"
-          block
-          round
-          style="flex:1"
-          @click="onImport"
-        >
-          导入数据
-        </van-button>
-      </div>
-      <van-button
-        type="warning"
-        icon="backup"
-        block
-        round
-        class="action-btn"
-        @click="onBackup"
-      >
-        备份
-      </van-button>
-    </section>
+      />
+    </div>
 
     
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import * as echarts from 'echarts'
+import FeePieChart from '@/components/FeePieChart.vue'
+import BaseBarChart from '@/components/BaseBarChart.vue'
 import { useRouter } from 'vue-router'
-import { db } from '@/utils/db'
+import { useMemberStore } from '@/stores/memberStore'
+import { usePolicyStore } from '@/stores/policyStore'
 import { importData } from '@/utils/importData'
+import { showToast } from 'vant'
 
 const router = useRouter()
+const barChartData = ref([])
+const barChartConfig = ref({})
+const memberStore = useMemberStore()
+const policyStore = usePolicyStore()
+const { members } = storeToRefs(memberStore)
+const { policies } = storeToRefs(policyStore)
 
-const members = ref([])
+// 总保费使用 computed 计算属性
+const totalFee = computed(() => {
+  return policies.value.reduce((sum, p) => sum + (Number(p.premium) || 0), 0)
+})
+
+// 总保额
+const totalAmount = computed(() => {
+  return policies.value.reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
+})
 
 const stats = ref({
   total: 0,
   active: 0,
   expiring: 0
 })
+// 饼图数据响应式
+const feePieData = ref([])
 
-const reminders = ref([
-  {
-    id: 'r1',
-    title: '保单A即将到期',
-    desc: '距离到期还有5天',
+// 底部浮动操作按钮相关
+const showActionSheet = ref(false)
+const actionSheetActions = [
+  { name: '添加保单', icon: 'plus', key: 'add' },
+  { name: '测试数据', icon: 'notes-o', key: 'test' },
+  { name: '导入数据', icon: 'logistics', key: 'import' }, // 物流/导入
+  { name: '备份', icon: 'records', key: 'backup' } // 记录/备份
+]
+function onActionSelect(action) {
+  showActionSheet.value = false
+  switch (action.key) {
+    case 'add':
+      onAddPolicy()
+      break
+    case 'test':
+      onImportTestData()
+      break
+    case 'import':
+      onImport()
+      break
+    case 'backup':
+      onBackup()
+      break
+  }
+}
+
+// 重要提醒：根据真实业务数据生成
+const reminders = computed(() => {
+  const now = new Date()
+  // 即将到期保单（7天内）
+  const expiring = policies.value.filter(p => {
+    if (!p.coverageEnd) return false
+    const end = new Date(p.coverageEnd)
+    const diff = (end - now) / (1000 * 60 * 60 * 24)
+    return diff > 0 && diff <= 7
+  }).map(p => ({
+    id: 'expiring-' + p.id,
+    title: `${p.insured}的${p.policyName || p.policyType || '保单'}即将到期`,
+    desc: `距离到期还有${Math.ceil((new Date(p.coverageEnd) - now) / (1000 * 60 * 60 * 24))}天`,
     icon: 'warning-o',
     color: '#FF5722'
-  },
-  {
-    id: 'r2',
-    title: '保单B等待期结束',
-    desc: '等待期将于明天结束',
+  }))
+  // 等待期即将结束（3天内）
+  const waiting = policies.value.filter(p => {
+    if (!p.waitingEnd) return false
+    const end = new Date(p.waitingEnd)
+    const diff = (end - now) / (1000 * 60 * 60 * 24)
+    return diff > 0 && diff <= 3
+  }).map(p => ({
+    id: 'waiting-' + p.id,
+    title: `${p.insured}的${p.policyName || p.policyType || '保单'}等待期即将结束`,
+    desc: `等待期将于${Math.ceil((new Date(p.waitingEnd) - now) / (1000 * 60 * 60 * 24))}天后结束`,
     icon: 'clock-o',
     color: '#FF9800'
-  }
-])
+  }))
+  return [...expiring, ...waiting]
+})
 
 
 // 图表初始化和成员数据加载
 onMounted(async () => {
-  // 从db获取成员
-  members.value = await db.getAllMembers()
-  // 从db获取保单
-  const policies = await db.getAllPolicies()
+  // 从store获取成员和保单
+  await memberStore.fetchMembers()
+  await policyStore.fetchPolicies()
   const now = new Date()
+  const policies = policyStore.policies
   stats.value.total = policies.length
   stats.value.active = policies.filter(p => {
-    // 只要当前日期小于 coverageEnd 即为生效中
     if (!p.coverageEnd) return false
     const end = new Date(p.coverageEnd)
     return now < end
@@ -181,25 +223,20 @@ onMounted(async () => {
   }).length
 
   // 图表数据处理
-  // 成员名列表
   const categories = members.value.map(m => m.name)
-  // 险种列表（去重）
   const policyTypes = [...new Set(policies.map(p => p.policyType).filter(Boolean))]
 
-  // 保费分布数据
-  const feeSeries = policyTypes.map(type => ({
-    name: type,
-    type: 'bar',
-    stack: 'total',
-    data: categories.map(memberName => {
-      // 该成员该险种的保费总和
-      return policies
-        .filter(p => p.insured === memberName && p.policyType === type)
-        .reduce((sum, p) => sum + (Number(p.premium) || 0), 0)
-    })
-  }))
-
-  // 保额分布数据
+  // 保费分布饼状图数据（以家庭成员为维度）
+  feePieData.value = categories.map(memberName => {
+    const value = policies
+      .filter(p => p.insured === memberName)
+      .reduce((sum, p) => sum + (Number(p.premium) || 0), 0)
+    return {
+      name: memberName,
+      value
+    }
+  })
+  // 保额分布柱状图数据和配置
   const amountSeries = policyTypes.map(type => ({
     name: type,
     type: 'bar',
@@ -211,27 +248,55 @@ onMounted(async () => {
     })
   }))
 
-  // 图表初始化
-  const feeChart = echarts.init(document.getElementById('chart-fee'))
-  const amountChart = echarts.init(document.getElementById('chart-amount'))
+  const yAxisOpt = {
+    type: 'value',
+    axisLabel: {
+      show: true,
+      formatter: function (value, idx) {
+        try {
+          const axis = this && this.axis ? this.axis : (typeof idx === 'object' && idx.axis ? idx.axis : undefined);
+          if (axis && axis.scale) {
+            const min = axis.scale._extent[0];
+            const max = axis.scale._extent[1];
+            if (value === min || value === max) return value;
+          }
+        } catch (e) { }
+        return '';
+      }
+    },
+    splitNumber: 2
+  }
 
-  feeChart.setOption({
-    title: { text: '保费分布（元）', left: 'center', textStyle: { fontSize: 14 } },
+  const addTotalLabel = (seriesArr) => {
+    return seriesArr.map((s, idx) => {
+      if (idx !== seriesArr.length - 1) {
+        return { ...s, label: { show: false } }
+      }
+      return {
+        ...s,
+        label: {
+          show: true,
+          position: 'top',
+          fontSize: 12,
+          color: '#333',
+          formatter: function (params) {
+            const total = seriesArr.reduce((sum, ser) => sum + (ser.data[params.dataIndex] || 0), 0)
+            return total > 0 ? total : ''
+          }
+        }
+      }
+    })
+  }
+
+  barChartData.value = amountSeries.map(s => s.data)
+  barChartConfig.value = {
+    title: { text: '', left: 'center', textStyle: { fontSize: 14 } },
     tooltip: {},
     legend: { data: policyTypes, bottom: 0 },
     xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value' },
-    series: feeSeries
-  })
-
-  amountChart.setOption({
-    title: { text: '保额分布（万元）', left: 'center', textStyle: { fontSize: 14 } },
-    tooltip: {},
-    legend: { data: policyTypes, bottom: 0 },
-    xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value' },
-    series: amountSeries
-  })
+    yAxis: yAxisOpt,
+    series: addTotalLabel(amountSeries)
+  }
 })
 
 // 事件处理
@@ -253,19 +318,20 @@ function onImport() {
   input.click()
 }
 
-// 导入测试数据
+// 导入测试数据（需将 test.json 放到 public 目录下，打包后通过 /test.json 访问）
 async function onImportTestData() {
-  // 直接读取 /src/assets/test.json 并导入
-  const res = await fetch('/src/assets/test.json')
-  if (res.ok) {
+  try {
+    const res = await fetch('/test.json')
+    if (!res.ok) throw new Error('无法加载测试数据文件')
+    // 大文件异步流式加载
     const json = await res.json()
     await importData(json)
-  } else {
-    alert('无法加载测试数据文件')
+  } catch (e) {
+    alert('导入测试数据失败：' + (e.message || e))
   }
 }
 function onBackup() {
-  alert('备份操作')
+  showToast('备份操作')
 }
 function goToPolicyList() {
   // 跳转到保单列表页面
@@ -338,6 +404,40 @@ function goToMemberList() {
   box-shadow: 0 1px 8px rgb(0 0 0 / 0.1);
 }
 
+.chart-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 8px;
+}
+.chart-title-fee {
+  margin-bottom: 8px;
+}
+.flex-row-between {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.chart-title-amount {
+  margin: 18px 0 8px 0;
+}
+.chart-title-total {
+  font-weight: 400;
+  font-size: 13px;
+  color: #888;
+  margin-left: 8px;
+}
+
+.highlight-green {
+  color: #07c160 !important;
+  font-weight: 600;
+  background: #eaffea;
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-left: 8px;
+}
+
 /* 重要提醒样式 */
 .reminders .van-cell {
   margin-bottom: 4px;
@@ -350,8 +450,32 @@ function goToMemberList() {
 }
 
 /* 快捷操作按钮 */
-.quick-actions .action-btn {
-  margin-bottom: 12px;
+
+/* 浮动操作按钮样式 */
+.fab-container {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  z-index: 200;
+  pointer-events: auto;
+}
+.fab-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1989fa 60%, #07c160 100%);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(25,137,250,0.18);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid #fff;
+  padding: 0;
+  transition: box-shadow 0.2s;
+}
+.fab-btn:active {
+  box-shadow: 0 2px 8px rgba(25,137,250,0.12);
 }
 
 /* tabbar样式 */
@@ -417,3 +541,11 @@ function goToMemberList() {
   display: flex;
 }
 </style>
+
+.reminders-top {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+.remind-notice {
+  margin-bottom: 8px;
+}

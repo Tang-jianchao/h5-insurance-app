@@ -69,14 +69,16 @@
 import { ref, onMounted } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
 import { GENDER_OPTIONS, RELATION_OPTIONS } from '@/utils/constant'
-import { db } from '@/utils/db'
+import { useMemberStore } from '@/stores/memberStore'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 
 import MyDatePicker from '@/components/MyDatePicker.vue'
 const datePickerValue = ref([])
 const router = useRouter()
 
-const members = ref([])
+const memberStore = useMemberStore()
+const { members } = storeToRefs(memberStore)
 const policies = ref([])
 const genderPickerValue = ref([])
 const relationPickerValue = ref([])
@@ -119,8 +121,13 @@ async function onDeleteMember(member) {
     title: '确认删除',
     message: `确定要删除成员「${member.name}」吗？删除后无法恢复。`
   }).then(async () => {
-    await db.deleteMember(member.id)
-    members.value = members.value.filter((m) => m.id !== member.id)
+    await memberStore.deleteMember(member.id)
+    // 重新统计保单数量
+    const allPolicies = policies.value
+    members.value = members.value.map(m => {
+      const count = allPolicies.filter(p => p.insured === m.name).length
+      return { ...m, policyCount: count }
+    })
     showToast('已删除')
   })
 }
@@ -150,25 +157,22 @@ async function onSubmit() {
 
   if (editingId.value) {
     // 编辑
-    const index = members.value.findIndex((m) => m.id === editingId.value)
-    if (index !== -1) {
-      const updated = { ...form.value, id: editingId.value }
-      await db.updateMember(updated)
-      // 重新统计保单数量
-      const count = policies.value.filter(p => p.insured === updated.name).length
-      members.value[index] = { ...updated, policyCount: count }
-    }
+    const updated = { ...form.value, id: editingId.value }
+    await memberStore.updateMember(updated)
   } else {
     // 新增
     const newMember = {
       ...form.value,
       id: Date.now()
     }
-    await db.addMember(newMember)
-    // 重新统计保单数量
-    const count = policies.value.filter(p => p.insured === newMember.name).length
-    members.value.push({ ...newMember, policyCount: count })
+    await memberStore.addMember(newMember)
   }
+  // 重新统计保单数量
+  const allPolicies = policies.value
+  members.value = members.value.map(m => {
+    const count = allPolicies.filter(p => p.insured === m.name).length
+    return { ...m, policyCount: count }
+  })
 
   showAdd.value = false
   form.value = resetForm()
@@ -178,13 +182,11 @@ async function onSubmit() {
 
 // 页面加载时从db获取成员和保单列表，并统计每个成员的保单数量
 onMounted(async () => {
-  const [allMembers, allPolicies] = await Promise.all([
-    db.getAllMembers(),
-    db.getAllPolicies()
-  ])
+  await memberStore.fetchMembers()
+  const allPolicies = await db.getAllPolicies()
   policies.value = allPolicies
   // 统计每个成员的保单数量（被保人名字匹配）
-  members.value = allMembers.map(member => {
+  members.value = members.value.map(member => {
     const count = allPolicies.filter(p => p.insured === member.name).length
     return { ...member, policyCount: count }
   })

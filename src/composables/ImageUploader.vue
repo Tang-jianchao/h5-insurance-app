@@ -4,15 +4,14 @@
 
 <script setup>
 import { useImageStore } from '@/stores/imageStore'
-import { db } from '@/utils/db'
+
 
 const store = useImageStore()
 
 const onUpload = async (file) => {
   const base64 = await toBase64(file.file)
   const data = { name: file.file.name, base64 }
-  const id = await db.addImage(data)
-  store.addImage({ id, ...data })
+  await store.addImage(data)
 }
 
 function toBase64(file) {

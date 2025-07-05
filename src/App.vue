@@ -3,8 +3,8 @@
     <router-view />
 
     <van-tabbar v-if="showTabbar" v-model="active" route>
-      <van-tabbar-item to="/" icon="home-o">首页</van-tabbar-item>
-      <van-tabbar-item to="/profile" icon="user-o">我的</van-tabbar-item>
+      <van-tabbar-item to="/" icon="wap-home">首页</van-tabbar-item>
+      <van-tabbar-item to="/profile" icon="user">我的</van-tabbar-item>
     </van-tabbar>
   </div>
 </template>

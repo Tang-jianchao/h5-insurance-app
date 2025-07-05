@@ -73,7 +73,10 @@
 <script setup>
 import { ref } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
-import { db } from '@/utils/db'
+import { useMemberStore } from '@/stores/memberStore'
+import { usePolicyStore } from '@/stores/policyStore'
+import { useImageStore } from '@/stores/imageStore'
+import { storeToRefs } from 'pinia'
 import { importData } from '@/utils/importData'
 
 // 提醒设置
@@ -87,13 +90,17 @@ const pinCode = ref(localStorage.getItem('pinCode') || '')
 
 // 导出 JSON
 async function exportJson() {
-  // 从db获取所有数据
-  const [members, policies, images] = await Promise.all([
-    db.getAllMembers(),
-    db.getAllPolicies(),
-    db.getAllImages()
-  ])
-  const data = JSON.stringify({ members, policies, images }, null, 2)
+  // 从store获取所有数据，若store未加载则先fetch
+  const memberStore = useMemberStore()
+  const policyStore = usePolicyStore()
+  const imageStore = useImageStore()
+  const { members } = storeToRefs(memberStore)
+  const { policies } = storeToRefs(policyStore)
+  const { images } = storeToRefs(imageStore)
+  if (!members.value.length) await memberStore.fetchMembers()
+  if (!policies.value.length) await policyStore.fetchPolicies()
+  if (!images.value.length) await imageStore.fetchImages()
+  const data = JSON.stringify({ members: members.value, policies: policies.value, images: images.value }, null, 2)
   const blob = new Blob([data], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

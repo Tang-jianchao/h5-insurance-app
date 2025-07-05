@@ -210,10 +210,12 @@ const demoData = {
 }
 const form = reactive(demoData)
 import { onMounted } from 'vue'
-import { db } from '@/utils/db'
+import { usePolicyStore } from '@/stores/policyStore'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
+const policyStore = usePolicyStore()
 const readonly = ref(false)
 
 const showPolicyHolderPicker = ref(false)
@@ -222,7 +224,7 @@ const memberOptions = ref([])
 
 onMounted(async () => {
   // 从db获取家庭成员
-  const members = await db.getAllMembers()
+  const members = await import('@/stores/memberStore').then(m => m.useMemberStore().members)
   memberOptions.value = members.map(m => ({ text: m.name, value: m.name, id: m.id }))
 
   if (route.query && Object.keys(route.query).length > 0) {
@@ -300,7 +302,7 @@ function onSubmit() {
         showToast('请选择是否保证续保')
         return
       }
-      // db存储，保留原始 coverageStart/coverageEnd
+      // store存储，保留原始 coverageStart/coverageEnd
       const policyData = {
         id: form.id || Date.now(),
         name: form.name,
@@ -319,9 +321,9 @@ function onSubmit() {
         healthBase64: form.healthBase64
       }
       if (form.id) {
-        await db.updatePolicy(policyData)
+        await policyStore.updatePolicy(policyData)
       } else {
-        await db.addPolicy(policyData)
+        await policyStore.addPolicy(policyData)
       }
       showToast('保单保存成功')
       onBack()
@@ -343,7 +345,7 @@ function onDelete() {
     showToast('缺少保单ID，无法删除')
     return
   }
-  db.deletePolicy(id).then(() => {
+  policyStore.deletePolicy(id).then(() => {
     showToast('保单已删除')
     setTimeout(() => {
       router.replace('/policy-list')

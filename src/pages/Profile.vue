@@ -39,23 +39,22 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { db } from '@/utils/db'
+import { useMemberStore } from '@/stores/memberStore'
+import { storeToRefs } from 'pinia'
 
-const currentUser = ref({
-  id: '',
-  name: '',
-  relation: ''
-})
+
+const memberStore = useMemberStore()
+const { members } = storeToRefs(memberStore)
+const currentUser = ref({ id: '', name: '', relation: '' })
 
 onMounted(async () => {
-  // 从db获取成员，过滤出“本人”
-  const members = await db.getAllMembers()
+  await memberStore.fetchMembers()
   // 关系为“本人”或“我自己”
-  const me = members.find(m => m.relation === '本人' || m.relation === '我自己')
+  const me = members.value.find(m => m.relation === '本人' || m.relation === '我自己')
   if (me) {
     currentUser.value = me
-  } else if (members.length > 0) {
-    currentUser.value = members[0]
+  } else if (members.value.length > 0) {
+    currentUser.value = members.value[0]
   } else {
     currentUser.value = { id: '', name: '未设置', relation: '' }
   }

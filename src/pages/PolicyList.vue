@@ -104,7 +104,8 @@
 
 import { onMounted, ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { db } from '@/utils/db'
+import { usePolicyStore } from '@/stores/policyStore'
+import { useMemberStore } from '@/stores/memberStore'
 import { showConfirmDialog, showToast } from 'vant'
 
 
@@ -120,19 +121,21 @@ const filter = ref({
   status: ''
 })
 
-const members = ref([])
+const memberStore = useMemberStore()
+const { members } = storeToRefs(memberStore)
+import { storeToRefs } from 'pinia'
+const policyStore = usePolicyStore()
+const { policies } = storeToRefs(policyStore)
 const policyTypes = ref([])
 const policyStatuses = ['生效中', '待生效', '已过期']
-const policies = ref([])
 
 onMounted(async () => {
-  // 获取成员
-  members.value = await db.getAllMembers()
-  // 获取保单
-  const allPolicies = await db.getAllPolicies()
-  policies.value = allPolicies
+  // 获取成员（从store）
+  await memberStore.fetchMembers()
+  // 获取保单（从store）
+  await policyStore.fetchPolicies()
   // 险种去重
-  policyTypes.value = [...new Set(allPolicies.map(p => p.policyType).filter(Boolean))]
+  policyTypes.value = [...new Set(policies.value.map(p => p.policyType).filter(Boolean))]
   // 进入页面时从参数获取 memberId
   if (route.query.memberId) {
     filter.value.memberId = String(route.query.memberId)
@@ -192,12 +195,11 @@ function onEditPolicy(policy) {
 }
 
 function onDeletePolicy(policy) {
-    showConfirmDialog({
+  showConfirmDialog({
     title: '确认删除',
     message: `确定要删除保单「${policy.name}」吗？删除后无法恢复。`
   }).then(async () => {
-    await db.deletePolicy(policy.id)
-     policies.value = policies.value.filter(p => p.id !== policy.id)
+    await policyStore.deletePolicy(policy.id)
     showToast('已删除')
   })
 }
