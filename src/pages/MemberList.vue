@@ -5,9 +5,9 @@
     <div class="card-list">
       <template v-if="members.length > 0">
         <van-swipe-cell v-for="member in members" :key="member.id" class="modern-card">
-          <template #left>
+          <!-- <template #left>
             <van-button square type="primary" icon="edit" class="swipe-btn edit-btn" @click.stop="editMember(member)" />
-          </template>
+          </template> -->
           <template #right>
             <van-button square type="danger" icon="delete" class="swipe-btn delete-btn"
               @click.stop="onDeleteMember(member)" />
@@ -19,7 +19,9 @@
                 保单：{{ member.policyCount }}
               </van-tag>
             </div>
-            <div class="card-desc">{{ member.relation }} / {{ member.gender }} / {{ member.birth }}</div>
+            <div class="card-desc">
+              {{ member.relation }} / {{ member.gender }} / {{ member.birth }} / {{ member.age }}
+            </div>
           </div>
         </van-swipe-cell>
       </template>
@@ -45,6 +47,7 @@
             :columns-type="['year', 'month', 'day']" />
           <van-field v-model="form.relation" is-link readonly name="relationPicker" label="关系" placeholder="请选择关系"
             @click="showRelationPicker = true" required />
+          <van-field v-model="form.age" label="年龄" readonly input-align="left" />
           <van-popup v-model:show="showRelationPicker" destroy-on-close position="bottom">
             <van-picker :columns="relationOptions" :model-value="relationPickerValue" @confirm="onSelectRelation"
               @cancel="showRelationPicker = false" />
@@ -66,14 +69,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { showConfirmDialog, showToast } from 'vant'
 import { GENDER_OPTIONS, RELATION_OPTIONS } from '@/utils/constant'
 import { useMemberStore } from '@/stores/memberStore'
+import { usePolicyStore } from '@/stores/policyStore'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 
 import MyDatePicker from '@/components/MyDatePicker.vue'
+const policyStore = usePolicyStore()
 const datePickerValue = ref([])
 const router = useRouter()
 
@@ -92,6 +97,9 @@ const genderOptions = GENDER_OPTIONS.map(opt => ({ text: opt.label, value: opt.c
 const relationOptions = RELATION_OPTIONS.map(opt => ({ text: opt.label, value: opt.code }))
 
 const form = ref(resetForm())
+watch(() => form.value.birth, (newBirth) => {
+  form.value.age = getAge(newBirth)
+})
 
 function resetForm() {
   return {
@@ -99,8 +107,32 @@ function resetForm() {
     name: '',
     gender: '',
     birth: '',
-    relation: ''
+    relation: '',
+    age: ''
   }
+}
+
+// 通过出生日期推算年龄
+function getAge(birth) {
+  if (!birth) return null
+  let birthDate
+  if (typeof birth === 'string') {
+    // 支持 yyyy-mm-dd 或 yyyy/mm/dd
+    const parts = birth.includes('-') ? birth.split('-') : birth.split('/')
+    if (parts.length < 3) return null
+    birthDate = new Date(parts[0], parts[1] - 1, parts[2])
+  } else if (birth instanceof Date) {
+    birthDate = birth
+  } else {
+    return null
+  }
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const m = today.getMonth() - birthDate.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--
+  }
+  return age >= 0 ? age : null
 }
 
 function viewPolicies(memberId) {
@@ -132,15 +164,14 @@ async function onDeleteMember(member) {
   })
 }
 
-function onCardClick(member) {
-  // 可扩展为成员详情弹窗或页面
-  showToast(`成员：${member.name}`)
-}
 
 function editMember(member) {
   editingId.value = member.id
-  form.value = { ...member }
-  // 进入编辑时同步 datePickerValue
+  // 进入编辑时同步 datePickerValue，并推算年龄
+  if (member.age === undefined || member.age === null) {
+    member.age = getAge(member.birth)
+  } 
+  form.value = { ...member}
   if (member.birth && typeof member.birth === 'string') {
     datePickerValue.value = member.birth.split('-')
   } else {
@@ -154,6 +185,8 @@ async function onSubmit() {
     showToast('请填写完整信息')
     return
   }
+  // 提交前推算年龄
+  form.value.age = getAge(form.value.birth)
 
   if (editingId.value) {
     // 编辑
@@ -180,15 +213,17 @@ async function onSubmit() {
   showToast('保存成功')
 }
 
-// 页面加载时从db获取成员和保单列表，并统计每个成员的保单数量
+// 页面加载时从store获取成员和保单列表，并统计每个成员的保单数量和年龄
 onMounted(async () => {
   await memberStore.fetchMembers()
-  const allPolicies = await db.getAllPolicies()
+  await policyStore.fetchPolicies()
+  const allPolicies = policyStore.policies ? policyStore.policies : []
   policies.value = allPolicies
-  // 统计每个成员的保单数量（被保人名字匹配）
+  // 统计每个成员的保单数量和年龄（被保人名字匹配）
   members.value = members.value.map(member => {
     const count = allPolicies.filter(p => p.insured === member.name).length
-    return { ...member, policyCount: count }
+    const age = getAge(member.birth)
+    return { ...member, policyCount: count, age: age !== null ? age : '' }
   })
 })
 

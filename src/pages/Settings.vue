@@ -14,18 +14,6 @@
       <van-cell title="导出为 PDF" is-link @click="exportPdf" />
     </van-cell-group>
 
-    <!-- 数据导入模块 -->
-    <van-cell-group title="📤 保单导入" inset>
-      <van-uploader
-        accept=".xlsx,.csv"
-        :after-read="onImportFile"
-        :max-count="1"
-        class="uploader"
-      >
-        <van-cell title="导入 Excel/CSV 模板" is-link />
-      </van-uploader>
-    </van-cell-group>
-
     <!-- 提醒设置 -->
     <van-cell-group title="🔔 提醒设置" inset>
       <van-field
@@ -46,7 +34,7 @@
     </van-cell-group>
 
     <!-- 加密保护 -->
-    <van-cell-group title="🔐 数据加密保护" inset>
+    <!-- <van-cell-group title="🔐 数据加密保护" inset>
       <van-field
         v-model="pinCode"
         label="设置访问密码"
@@ -56,7 +44,7 @@
         @blur="savePin"
       />
       <div class="desc">设置后，访问本页面或导出数据时需输入密码</div>
-    </van-cell-group>
+    </van-cell-group> -->
 
     <!-- 清除数据 -->
     <van-cell-group title="🌐 数据清除" inset>
@@ -76,14 +64,13 @@ import { showConfirmDialog, showToast } from 'vant'
 import { useMemberStore } from '@/stores/memberStore'
 import { usePolicyStore } from '@/stores/policyStore'
 import { useImageStore } from '@/stores/imageStore'
+import { useSettingStore } from '@/stores/settingStore'
 import { storeToRefs } from 'pinia'
 import { importData } from '@/utils/importData'
 
 // 提醒设置
-const reminderDays = ref({
-  waiting: 3,
-  expiry: 7
-})
+const settingStore = useSettingStore()
+const reminderDays = ref(settingStore.getReminderDays())
 
 // 加密保护
 const pinCode = ref(localStorage.getItem('pinCode') || '')
@@ -117,16 +104,12 @@ function exportPdf() {
   // 实际可以用 jsPDF 实现内容渲染为 PDF 下载
 }
 
-// 导入文件
-async function onImportFile(file) {
-  if (file && file.file) {
-    await importData(file.file)
-  }
-}
-
 // 保存提醒设置
 function saveReminderSettings() {
-  localStorage.setItem('reminderDays', JSON.stringify(reminderDays.value))
+  settingStore.setReminderDays({
+    waiting: reminderDays.value.waiting,
+    expiry: reminderDays.value.expiry
+  })
   showToast('提醒设置已保存')
 }
 

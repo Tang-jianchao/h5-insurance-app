@@ -31,7 +31,8 @@ const renderChart = () => {
     tooltip: {
       trigger: 'item',
       formatter: function(params) {
-        return `${params.percent}%`;
+        // params: { name, value, percent }
+        return `${params.name}<br/>保费：${params.value} 元<br/>占比：${params.percent}%`;
       }
     },
     legend: {

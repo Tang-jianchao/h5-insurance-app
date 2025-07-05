@@ -1,3 +1,19 @@
+// 险种色彩常量
+export const POLICY_TYPE_COLORS = [
+  { policyTypeCode: 1, color: '#1989fa' }, // 车险
+  { policyTypeCode: 2, color: '#07c160' }, // 医疗险
+  { policyTypeCode: 3, color: '#ffb300' }, // 寿险
+  { policyTypeCode: 4, color: '#ee0a24' }, // 意外险
+  { policyTypeCode: 5, color: '#673ab7' }, // 重疾险
+  { policyTypeCode: 6, color: '#009688' }, // 养老险
+  { policyTypeCode: 8, color: '#00bcd4' }  // 旅行险
+]
+// 保单状态常量
+export const POLICY_STATUS_OPTIONS = [
+  { label: '生效中', code: 1 },
+  { label: '待生效', code: 2 },
+  { label: '已过期', code: 3 }
+]
 // 关系常量
 export const RELATION_OPTIONS = [
   { label: '本人', code: 1 },

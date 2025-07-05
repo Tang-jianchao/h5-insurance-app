@@ -2,6 +2,23 @@
   <div class="home">
     <van-nav-bar title="家庭保单总览" fixed safe-area-inset-top />
 
+    <!-- 重要提醒 NoticeBar 顶部展示，无标题 -->
+    <div class="reminders-top" v-if="reminders.length > 0">
+      <van-notice-bar left-icon="volume-o" :scrollable="false">
+      <van-swipe
+        vertical
+        class="notice-swipe"
+        :autoplay="3000"
+        :touchable="false"
+        :show-indicators="false"
+      >
+        <van-swipe-item v-for="reminder in reminders" class="reminder-swipe-item">
+          <span class="reminder-text">{{ reminder.title + '，' + reminder.desc }}</span>
+        </van-swipe-item>
+      </van-swipe>
+    </van-notice-bar>
+    </div>
+
     <!-- 家庭成员列表 -->
     <section class="section family-members">
       <div class="family-header">
@@ -18,11 +35,12 @@
         >
           <template #icon>
             <van-image
-              :src="member.avatar"
+              :src="member.avatar || defaultAvatar"
               width="40"
               height="40"
               round
               fit="cover"
+              class="member-avatar"
             />
           </template>
         </van-cell>
@@ -66,22 +84,6 @@
 
     </section>
 
-    <!-- 重要提醒 NoticeBar 顶部展示，无标题 -->
-    <div class="reminders-top">
-      <div v-if="reminders.length > 0">
-        <van-notice-bar
-          v-for="remind in reminders"
-          :key="remind.id"
-          :text="remind.title + '，' + remind.desc"
-          :color="remind.color"
-          :left-icon="remind.icon"
-          wrapable
-          class="remind-notice"
-        />
-      </div>
-      <!-- <div v-else class="empty-tip">顺风顺水</div> -->
-    </div>
-
 
     <!-- 底部浮动操作按钮组 -->
     <van-action-sheet
@@ -114,14 +116,17 @@ import BaseBarChart from '@/components/BaseBarChart.vue'
 import { useRouter } from 'vue-router'
 import { useMemberStore } from '@/stores/memberStore'
 import { usePolicyStore } from '@/stores/policyStore'
+import { useSettingStore } from '@/stores/settingStore'
 import { importData } from '@/utils/importData'
 import { showToast } from 'vant'
+import defaultAvatar from '@/assets/default-avatar.png'
 
 const router = useRouter()
 const barChartData = ref([])
 const barChartConfig = ref({})
 const memberStore = useMemberStore()
 const policyStore = usePolicyStore()
+const settingStore = useSettingStore()
 const { members } = storeToRefs(memberStore)
 const { policies } = storeToRefs(policyStore)
 
@@ -146,7 +151,7 @@ const feePieData = ref([])
 // 底部浮动操作按钮相关
 const showActionSheet = ref(false)
 const actionSheetActions = [
-  { name: '添加保单', icon: 'plus', key: 'add' },
+  // { name: '添加保单', icon: 'plus', key: 'add' },
   { name: '测试数据', icon: 'notes-o', key: 'test' },
   { name: '导入数据', icon: 'logistics', key: 'import' }, // 物流/导入
   { name: '备份', icon: 'records', key: 'backup' } // 记录/备份
@@ -172,12 +177,13 @@ function onActionSelect(action) {
 // 重要提醒：根据真实业务数据生成
 const reminders = computed(() => {
   const now = new Date()
-  // 即将到期保单（7天内）
+  const { waiting, expiry } = settingStore.getReminderDays()
+  // 即将到期保单（自定义天数内）
   const expiring = policies.value.filter(p => {
     if (!p.coverageEnd) return false
     const end = new Date(p.coverageEnd)
     const diff = (end - now) / (1000 * 60 * 60 * 24)
-    return diff > 0 && diff <= 7
+    return diff > 0 && diff <= expiry
   }).map(p => ({
     id: 'expiring-' + p.id,
     title: `${p.insured}的${p.policyName || p.policyType || '保单'}即将到期`,
@@ -185,12 +191,12 @@ const reminders = computed(() => {
     icon: 'warning-o',
     color: '#FF5722'
   }))
-  // 等待期即将结束（3天内）
-  const waiting = policies.value.filter(p => {
+  // 等待期即将结束（自定义天数内）
+  const waitingArr = policies.value.filter(p => {
     if (!p.waitingEnd) return false
     const end = new Date(p.waitingEnd)
     const diff = (end - now) / (1000 * 60 * 60 * 24)
-    return diff > 0 && diff <= 3
+    return diff > 0 && diff <= waiting
   }).map(p => ({
     id: 'waiting-' + p.id,
     title: `${p.insured}的${p.policyName || p.policyType || '保单'}等待期即将结束`,
@@ -198,7 +204,7 @@ const reminders = computed(() => {
     icon: 'clock-o',
     color: '#FF9800'
   }))
-  return [...expiring, ...waiting]
+  return [...expiring, ...waitingArr]
 })
 
 
@@ -226,7 +232,7 @@ onMounted(async () => {
   const categories = members.value.map(m => m.name)
   const policyTypes = [...new Set(policies.map(p => p.policyType).filter(Boolean))]
 
-  // 保费分布饼状图数据（以家庭成员为维度）
+  // 保费分布饼状图数据（以家庭成员为维度，过滤为0的数据）
   feePieData.value = categories.map(memberName => {
     const value = policies
       .filter(p => p.insured === memberName)
@@ -235,9 +241,10 @@ onMounted(async () => {
       name: memberName,
       value
     }
-  })
-  // 保额分布柱状图数据和配置
-  const amountSeries = policyTypes.map(type => ({
+  }).filter(item => item.value > 0)
+
+  // 保额分布柱状图数据和配置（过滤所有成员都为0的险种）
+  let rawAmountSeries = policyTypes.map(type => ({
     name: type,
     type: 'bar',
     stack: 'total',
@@ -247,6 +254,8 @@ onMounted(async () => {
         .reduce((sum, p) => sum + (Number(p.amount) || 0), 0)
     })
   }))
+  // 只保留有至少一个成员保额大于0的险种
+  const amountSeries = rawAmountSeries.filter(series => series.data.some(val => val > 0))
 
   const yAxisOpt = {
     type: 'value',
@@ -291,7 +300,23 @@ onMounted(async () => {
   barChartData.value = amountSeries.map(s => s.data)
   barChartConfig.value = {
     title: { text: '', left: 'center', textStyle: { fontSize: 14 } },
-    tooltip: {},
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: function(params) {
+        // params: 数组，每个系列在该类目下的数据
+        let name = params[0]?.axisValueLabel || params[0]?.name || ''
+        let lines = [`<div style='font-weight:600;margin-bottom:2px;'>${name}</div>`]
+        params.forEach(item => {
+          // item.seriesName: 险种，item.value: 保额
+          if (item.value > 0) {
+            lines.push(`<span style='display:inline-block;margin-right:6px;width:10px;height:10px;border-radius:50%;background:${item.color}'></span>`
+              + `${item.seriesName}：<b style='color:#333'>${item.value}</b> 万元`)
+          }
+        })
+        return lines.join('<br/>')
+      }
+    },
     legend: { data: policyTypes, bottom: 0 },
     xAxis: { type: 'category', data: categories },
     yAxis: yAxisOpt,
@@ -540,12 +565,35 @@ function goToMemberList() {
   align-items: center;
   display: flex;
 }
-</style>
-
-.reminders-top {
-  margin-top: 12px;
-  margin-bottom: 12px;
+.member-avatar {
+  margin-right: 12px;
 }
 .remind-notice {
   margin-bottom: 8px;
 }
+
+/* 重要提醒 swipe item 垂直居中样式 */
+.reminder-swipe-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  min-height: 40px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.reminder-text {
+  font-size: 15px;
+  color: #ff5722;
+  font-weight: 500;
+  text-align: center;
+  width: 100%;
+  line-height: 1.4;
+}
+  .notice-swipe {
+    height: 40px;
+    line-height: 40px;
+  }
+
+</style>
+

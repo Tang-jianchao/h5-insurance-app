@@ -135,6 +135,14 @@
           :max-date="new Date(2100, 11, 31)"
           :readonly="readonly"
         />
+        <van-field
+          :model-value="getStatusLabel(form.status)"
+          name="status"
+          label="保单状态"
+          readonly
+          placeholder=""
+          input-align="left"
+        />
         <!-- 保证续保 -->
         <van-field label="保证续保" required>
           <template #input>
@@ -185,10 +193,20 @@
 import { reactive, ref } from 'vue'
 import { showToast } from 'vant'
 import MyDatePicker from '@/components/MyDatePicker.vue'
+import { onMounted } from 'vue'
+import { usePolicyStore } from '@/stores/policyStore'
+import { storeToRefs } from 'pinia'
+import { useRoute, useRouter } from 'vue-router'
 
+import { POLICY_TYPES, POLICY_STATUS_OPTIONS } from '@/utils/constant'
 
-import { POLICY_TYPES } from '@/utils/constant'
 const formRef = ref(null)
+
+// 保单状态映射
+function getStatusLabel(code) {
+  const opt = POLICY_STATUS_OPTIONS.find(opt => String(opt.code) === String(code))
+  return opt ? opt.label : ''
+}
 
 const showTypePicker = ref(false)
 const policyTypeOptions = POLICY_TYPES.map(opt => ({ text: opt.label, value: opt.code }))
@@ -208,11 +226,32 @@ const demoData = {
   attachmentBase64: '',
   healthBase64: ''
 }
-const form = reactive(demoData)
-import { onMounted } from 'vue'
-import { usePolicyStore } from '@/stores/policyStore'
-import { storeToRefs } from 'pinia'
-import { useRoute, useRouter } from 'vue-router'
+const form = reactive({
+  ...demoData,
+  status: '' // 保单状态字段，存储code
+})
+import { watch } from 'vue'
+// 计算保单状态（返回code）
+function calcPolicyStatus(start, end) {
+  if (!start || !end) return ''
+  const now = new Date()
+  const s = new Date(start)
+  const e = new Date(end)
+  if (now < s) return 2 // 待生效
+  if (now > e) return 3 // 已过期
+  return 1 // 生效中
+}
+
+// 监听保障日期变化，自动推算保单状态（存code）
+watch(
+  () => [form.coverageStart, form.coverageEnd],
+  ([start, end]) => {
+    form.status = calcPolicyStatus(start, end)
+  },
+  { immediate: true }
+)
+
+
 const route = useRoute()
 const router = useRouter()
 const policyStore = usePolicyStore()
@@ -221,7 +260,6 @@ const readonly = ref(false)
 const showPolicyHolderPicker = ref(false)
 const showInsuredPicker = ref(false)
 const memberOptions = ref([])
-
 onMounted(async () => {
   // 从db获取家庭成员
   const members = await import('@/stores/memberStore').then(m => m.useMemberStore().members)
@@ -317,6 +355,7 @@ function onSubmit() {
         insuredMemberId: form.insuredMemberId || null,
         policyType: form.policyType,
         renewable: form.renewable,
+        status: form.status, // 存储code
         attachmentBase64: form.attachmentBase64,
         healthBase64: form.healthBase64
       }

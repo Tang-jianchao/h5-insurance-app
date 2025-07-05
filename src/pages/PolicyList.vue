@@ -13,50 +13,29 @@
       class="search-box"
     />
 
-    <!-- 筛选项 -->
-    <van-tabs v-model="activeTab" swipeable>
-      <van-tab title="成员">
-        <van-tag
-          v-for="member in members"
-          :key="member.id"
-          :type="filter.memberId == member.id ? 'primary' : 'default'"
-          class="filter-tag"
-          @click="onFilterChange('memberId', member.id)"
-          :round="true"
-          plain
-        >
-          {{ member.name }}
-        </van-tag>
-      </van-tab>
-
-      <van-tab title="险种">
-        <van-tag
-          v-for="type in policyTypes"
-          :key="type"
-          :type="filter.type === type ? 'primary' : 'default'"
-          class="filter-tag"
-          @click="onFilterChange('type', type)"
-          :round="true"
-          plain
-        >
-          {{ type }}
-        </van-tag>
-      </van-tab>
-
-      <van-tab title="状态">
-        <van-tag
-          v-for="status in policyStatuses"
-          :key="status"
-          :type="filter.status === status ? 'primary' : 'default'"
-          class="filter-tag"
-          @click="onFilterChange('status', status)"
-          :round="true"
-          plain
-        >
-          {{ status }}
-        </van-tag>
-      </van-tab>
-    </van-tabs>
+    <!-- 筛选项：下拉选择 -->
+    <div class="filter-selects">
+      <van-dropdown-menu>
+        <van-dropdown-item
+          v-model="filter.memberId"
+          :options="memberOptions"
+          title="成员"
+          @change="onFilterChange('memberId', $event)"
+        />
+        <van-dropdown-item
+          v-model="filter.type"
+          :options="typeOptions"
+          title="险种"
+          @change="onFilterChange('type', $event)"
+        />
+        <van-dropdown-item
+          v-model="filter.status"
+          :options="statusOptions"
+          title="状态"
+          @change="onFilterChange('status', $event)"
+        />
+      </van-dropdown-menu>
+    </div>
 
     <!-- 保单卡片列表 -->
 
@@ -75,7 +54,13 @@
         <div class="card-content" @click="onCardClick(policy)">
           <div class="card-header">
             <div class="card-title">{{ policy.name }}</div>
-            <van-tag v-if="policy.renewable === true" color="#07c160" plain round>保证续保</van-tag>
+            <van-tag
+              v-if="policy.policyType"
+              :style="{ color: getPolicyTypeColor(policy.policyType), borderColor: getPolicyTypeColor(policy.policyType) }"
+              plain round class="type-tag"
+            >
+              {{ policy.policyType }}
+            </van-tag>
           </div>
           <div class="card-desc">投保人：{{ policy.policyHolder }} | 被保人：{{ policy.insured }} | 险种：{{ policy.policyType }}</div>
           <div class="card-footer">
@@ -102,24 +87,52 @@
 
 <script setup>
 
+
 import { onMounted, ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { usePolicyStore } from '@/stores/policyStore'
 import { useMemberStore } from '@/stores/memberStore'
 import { showConfirmDialog, showToast } from 'vant'
+import { POLICY_STATUS_OPTIONS, POLICY_TYPES, POLICY_TYPE_COLORS } from '@/utils/constant'
 
 
 const router = useRouter()
 const route = useRoute()
 
 const searchText = ref('')
-const activeTab = ref('成员')
+
+
 
 const filter = ref({
   memberId: '',
   type: '',
   status: ''
 })
+// 险种名转code
+function getPolicyTypeCode(typeName) {
+  const found = POLICY_TYPES.find(t => t.label === typeName)
+  return found ? found.code : undefined
+}
+// // 险种code转色彩
+function getPolicyTypeColor(typeName) {
+  const code = getPolicyTypeCode(typeName)
+  const found = POLICY_TYPE_COLORS.find(c => c.policyTypeCode === code)
+  return found ? found.color : '#1989fa'
+}
+
+// vant 下拉选项格式
+const memberOptions = computed(() => [
+  { text: '全部成员', value: '' },
+  ...members.value.map(m => ({ text: m.name, value: String(m.id) }))
+])
+const typeOptions = computed(() => [
+  { text: '全部险种', value: '' },
+  ...policyTypes.value.map(t => ({ text: t, value: t }))
+])
+const statusOptions = computed(() => [
+  { text: '全部状态', value: '' },
+  ...policyStatuses.map(s => ({ text: s.label, value: s.code }))
+])
 
 const memberStore = useMemberStore()
 const { members } = storeToRefs(memberStore)
@@ -127,7 +140,7 @@ import { storeToRefs } from 'pinia'
 const policyStore = usePolicyStore()
 const { policies } = storeToRefs(policyStore)
 const policyTypes = ref([])
-const policyStatuses = ['生效中', '待生效', '已过期']
+const policyStatuses = POLICY_STATUS_OPTIONS
 
 onMounted(async () => {
   // 获取成员（从store）
@@ -158,11 +171,7 @@ const filteredPolicies = computed(() => {
 })
 
 function onFilterChange(field, val) {
-  if (field === 'memberId') {
-    filter.value.memberId = filter.value.memberId === val ? '' : val
-  } else {
-    filter.value[field] = filter.value[field] === val ? '' : val
-  }
+  filter.value[field] = val
 }
 
 function onSearch() {
@@ -219,9 +228,8 @@ function footerContent(policy) {
 .search-box {
   margin: 12px 0;
 }
-.filter-tag {
-  margin: 4px 8px 8px 0;
-  cursor: pointer;
+.filter-selects {
+  margin: 10px 0 8px 0;
 }
 .cards {
   margin-top: 0;
@@ -303,5 +311,14 @@ function footerContent(policy) {
   background: #1989fa;
   color: #fff;
   border: none;
+}
+.type-tag {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 0 10px;
+  height: 22px;
+  line-height: 20px;
+  border-radius: 12px;
 }
 </style>
