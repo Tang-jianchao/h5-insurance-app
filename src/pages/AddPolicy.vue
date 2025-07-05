@@ -9,12 +9,15 @@
     />
 
     <van-form
+      label-width="100"
       @submit="onSubmit"
       ref="formRef"
       :validate-first="false"
       class="form"
       :readonly="readonly"
     >
+      <!-- 基本信息 -->
+      <div class="section-title">基本信息</div>
       <van-cell-group>
         <!-- 投保人 -->
         <van-field
@@ -54,6 +57,10 @@
             @cancel="showInsuredPicker = false"
           />
         </van-popup>
+      </van-cell-group>
+      <!-- 保险信息 -->
+      <div class="section-title">保险信息</div>
+      <van-cell-group>
         <!-- 保单名称 -->
         <van-field
           v-model="form.name"
@@ -175,9 +182,9 @@
           :disabled="readonly"
         />
       </div> -->
-      <van-button v-if="!readonly" round block type="primary" native-type="submit" class="submit-btn"
-        >保存保单</van-button
-      >
+      <div v-if="!readonly" class="sticky-footer">
+        <van-button round block type="primary" native-type="submit" class="submit-btn">保存保单</van-button>
+      </div>
     </van-form>
     <!-- 只读模式下底部操作栏 -->
     <div v-if="readonly" class="sticky-footer">
@@ -186,11 +193,16 @@
         <van-button type="danger" block @click="onDelete" class="sticky-btn">删除</van-button>
       </div>
     </div>
+    <!-- 右下角浮动拍照识别 -->
+    <!-- <div class="ocr-float-btn">
+      <OcrCameraInput />
+    </div> -->
   </div>
 </template>
 
 <script setup>
 import { reactive, ref } from 'vue'
+import OcrCameraInput from '@/components/OcrCameraInput.vue'
 import { showToast } from 'vant'
 import MyDatePicker from '@/components/MyDatePicker.vue'
 import { onMounted } from 'vue'
@@ -429,9 +441,20 @@ function onDelete() {
   margin: 12px 0 0 8px;
 }
 .submit-btn {
-  margin-top: 24px;
+  margin: 0;
   font-size: 16px;
   height: 48px;
+  border-radius: 0;
+}
+.sticky-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  padding: 0 12px 12px 12px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
 }
 .sticky-footer {
   position: fixed;
@@ -454,4 +477,18 @@ function onDelete() {
   height: 48px;
   font-size: 16px;
 }
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 18px 0 8px 4px;
+}
+
+.ocr-float-btn {
+  position: fixed;
+  right: 18px;
+  bottom: 90px;
+  z-index: 200;
+  background: transparent;
+}
+
 </style>
